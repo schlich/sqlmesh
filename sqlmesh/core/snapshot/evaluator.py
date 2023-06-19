@@ -716,6 +716,19 @@ class IncrementalByUniqueKeyStrategy(MaterializableStrategy):
         )
 
 
+class IncrementalAppend(MaterializableStrategy):
+    def insert(
+        self,
+        model: Model,
+        name: str,
+        query_or_df: QueryOrDF,
+        snapshots: t.Dict[str, Snapshot],
+        is_dev: bool,
+        **kwargs: t.Any,
+    ) -> None:
+        self.append(model, name, query_or_df, snapshots, is_dev, **kwargs)
+
+
 class FullRefreshStrategy(MaterializableStrategy):
     def insert(
         self,

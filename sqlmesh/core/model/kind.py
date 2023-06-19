@@ -28,6 +28,10 @@ class ModelKindMixin:
         return self.model_kind_name == ModelKindName.INCREMENTAL_BY_UNIQUE_KEY
 
     @property
+    def is_incremental_append(self) -> bool:
+        return self.model_kind_name == ModelKindName.INCREMENTAL_APPEND
+
+    @property
     def is_full(self) -> bool:
         return self.model_kind_name == ModelKindName.FULL
 
@@ -67,6 +71,7 @@ class ModelKindName(str, ModelKindMixin, Enum):
 
     INCREMENTAL_BY_TIME_RANGE = "INCREMENTAL_BY_TIME_RANGE"
     INCREMENTAL_BY_UNIQUE_KEY = "INCREMENTAL_BY_UNIQUE_KEY"
+    INCREMENTAL_APPEND = "INCREMENTAL_APPEND"
     FULL = "FULL"
     VIEW = "VIEW"
     EMBEDDED = "EMBEDDED"
@@ -95,6 +100,8 @@ class ModelKind(PydanticModel, ModelKindMixin):
                     klass = IncrementalByTimeRangeKind
                 elif name == ModelKindName.INCREMENTAL_BY_UNIQUE_KEY:
                     klass = IncrementalByUniqueKeyKind
+                elif name == ModelKindName.INCREMENTAL_APPEND:
+                    klass = IncrementalAppendKind
                 elif name == ModelKindName.SEED:
                     klass = SeedKind
                 elif name == ModelKindName.VIEW:
@@ -108,6 +115,8 @@ class ModelKind(PydanticModel, ModelKindMixin):
                     klass = IncrementalByTimeRangeKind
                 elif v.get("name") == ModelKindName.INCREMENTAL_BY_UNIQUE_KEY:
                     klass = IncrementalByUniqueKeyKind
+                elif v.get("name") == ModelKindName.INCREMENTAL_APPEND:
+                    klass = IncrementalAppendKind
                 elif v.get("name") == ModelKindName.SEED:
                     klass = SeedKind
                 elif v.get("name") == ModelKindName.VIEW:
@@ -239,6 +248,10 @@ class IncrementalByUniqueKeyKind(_Incremental):
         if isinstance(v, exp.Tuple):
             return [e.this for e in v.expressions]
         return [i.this if isinstance(i, exp.Identifier) else str(i) for i in v]
+
+
+class IncrementalAppendKind(_Incremental):
+    name: ModelKindName = Field(ModelKindName.INCREMENTAL_APPEND, const=True)
 
 
 class ViewKind(ModelKind):
