@@ -240,11 +240,16 @@ class RedshiftEngineAdapter(
         Returns all the data objects that exist in the given schema and optionally catalog.
         """
         catalog = self.get_current_catalog()
-        table_query = exp.select(
-            exp.column("schemaname").as_("schema_name"),
-            exp.column("tablename").as_("name"),
-            exp.Literal.string("TABLE").as_("type"),
-        ).from_("pg_tables")
+        schema_filter = exp.column("schemaname").eq(to_schema(schema_name).db)
+        table_query = (
+            exp.select(
+                exp.column("schemaname").as_("schema_name"),
+                exp.column("tablename").as_("name"),
+                exp.Literal.string("TABLE").as_("type"),
+            )
+            .from_("pg_tables")
+            .where(schema_filter)
+        )
         view_query = (
             exp.select(
                 exp.column("schemaname").as_("schema_name"),
@@ -253,6 +258,7 @@ class RedshiftEngineAdapter(
             )
             .from_("pg_views")
             .where(exp.column("definition").ilike("%create materialized view%").not_())
+            .where(schema_filter)
         )
         materialized_view_query = (
             exp.select(
@@ -262,19 +268,21 @@ class RedshiftEngineAdapter(
             )
             .from_("pg_views")
             .where(exp.column("definition").ilike("%create materialized view%"))
+            .where(schema_filter)
         )
-        subquery = exp.union(
+
+        if object_names:
+            table_query = table_query.where(exp.column("tablename").isin(*object_names))
+            view_query = view_query.where(exp.column("viewname").isin(*object_names))
+            materialized_view_query = materialized_view_query.where(
+                exp.column("viewname").isin(*object_names)
+            )
+
+        query = exp.union(
             table_query,
             exp.union(view_query, materialized_view_query, distinct=False),
             distinct=False,
         )
-        query = (
-            exp.select("*")
-            .from_(subquery.subquery(alias="objs"))
-            .where(exp.column("schema_name").eq(to_schema(schema_name).db))
-        )
-        if object_names:
-            query = query.where(exp.column("name").isin(*object_names))
         df = self.fetchdf(query)
         return [
             DataObject(
