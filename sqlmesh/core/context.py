@@ -86,6 +86,7 @@ from sqlmesh.core.snapshot import (
     SnapshotFingerprint,
     to_table_mapping,
 )
+from sqlmesh.core.snapshot.definition import latest_start_date
 from sqlmesh.core.state_sync import (
     CachingStateSync,
     StateReader,
@@ -103,7 +104,7 @@ from sqlmesh.core.test import (
 from sqlmesh.core.user import User
 from sqlmesh.utils import UniqueKeyDict, sys_path
 from sqlmesh.utils.dag import DAG
-from sqlmesh.utils.date import TimeLike, now_ds, to_date
+from sqlmesh.utils.date import TimeLike, now_ds, to_date, to_timestamp
 from sqlmesh.utils.errors import (
     CircuitBreakerError,
     ConfigError,
@@ -996,6 +997,7 @@ class GenericContext(BaseContext, t.Generic[C]):
         # If no end date is specified, use the max interval end from prod
         # to prevent unintended evaluation of the entire DAG.
         if not run:
+            snapshots_for_latest_start = []
             if backfill_models is not None:
                 # Only consider selected models for the default end value.
                 models_for_default_end = backfill_models.copy()
@@ -1003,6 +1005,7 @@ class GenericContext(BaseContext, t.Generic[C]):
                     if name not in snapshots:
                         continue
                     snapshot = snapshots[name]
+                    snapshots_for_latest_start.append(snapshot)
                     snapshot_id = snapshot.snapshot_id
                     if (
                         snapshot_id in context_diff.added
@@ -1020,6 +1023,20 @@ class GenericContext(BaseContext, t.Generic[C]):
                 default_end = self.state_sync.max_interval_end_for_environment(
                     c.PROD, ensure_finalized_snapshots=self.config.plan.use_finalized_state
                 )
+                snapshots_for_latest_start = list(snapshots.values())
+            latest_start = to_timestamp(
+                latest_start_date(
+                    [
+                        snapshot
+                        for snapshot in snapshots_for_latest_start
+                        if snapshot.is_model
+                        and not snapshot.model_kind_name.is_seed  # type: ignore
+                        and not snapshot.model_kind_name.is_external  # type: ignore
+                    ]
+                )
+            )
+            default_end = max(default_end, latest_start) if default_end else None
+
         else:
             default_end = None
 

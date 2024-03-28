@@ -1577,6 +1577,19 @@ def compute_missing_intervals(
     return missing
 
 
+def _agg_over_start_date(
+    snapshots: t.Collection[Snapshot],
+    agg: t.Callable[[t.Iterable[datetime]], datetime],
+    cache: t.Optional[t.Dict[str, datetime]] = None,
+    relative_to: t.Optional[TimeLike] = None,
+) -> datetime:
+    cache = {} if cache is None else cache
+    return agg(
+        start_date(snapshot, snapshots, cache=cache, relative_to=relative_to)
+        for snapshot in snapshots
+    )
+
+
 def earliest_start_date(
     snapshots: t.Collection[Snapshot],
     cache: t.Optional[t.Dict[str, datetime]] = None,
@@ -1591,13 +1604,24 @@ def earliest_start_date(
     Returns:
         The earliest start date or yesterday if none is found.
     """
-    cache = {} if cache is None else cache
-    if snapshots:
-        return min(
-            start_date(snapshot, snapshots, cache=cache, relative_to=relative_to)
-            for snapshot in snapshots
-        )
-    return yesterday()
+    return (
+        _agg_over_start_date(snapshots, min, cache=cache, relative_to=relative_to)
+        if snapshots
+        else yesterday()
+    )
+
+
+def latest_start_date(
+    snapshots: t.Collection[Snapshot],
+    cache: t.Optional[t.Dict[str, datetime]] = None,
+) -> datetime:
+    """Get the latest start date from a collection of snapshots.
+
+    Args:
+        snapshots: Snapshots to find latest start date.
+        cache: optional cache to make computing cache date more efficient
+    """
+    return _agg_over_start_date(snapshots, max, cache=cache) if snapshots else yesterday()
 
 
 def start_date(
