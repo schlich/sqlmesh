@@ -593,7 +593,10 @@ def format_model_expressions(
 
     *statements, query = expressions
 
-    def cast_to_colon(node: exp.Expression) -> exp.Expression:
+    def cast_to_colon(node: exp.Expression, dialect: t.Optional[str] = None) -> exp.Expression:
+        if isinstance(node, exp.Cast) and dialect == "tsql":
+            node = node.this
+
         if isinstance(node, exp.Cast) and not any(
             # Only convert CAST into :: if it doesn't have additional args set, otherwise this
             # conversion could alter the semantics (eg. changing SAFE_CAST in BigQuery to CAST)
@@ -608,11 +611,11 @@ def format_model_expressions(
                 cast.comments = node.comments
                 node = cast
 
-        exp.replace_children(node, cast_to_colon)
+        exp.replace_children(node, cast_to_colon, dialect)
         return node
 
     query = query.copy()
-    exp.replace_children(query, cast_to_colon)
+    exp.replace_children(query, cast_to_colon, dialect)
 
     return ";\n\n".join(
         [
