@@ -105,6 +105,20 @@ class StagedFilePath(exp.Table):
     """Represents paths to "staged files" in Snowflake."""
 
 
+def _colon_cast_sql(
+    self: Generator, expression: exp.Cast, safe_prefix: t.Optional[str] = None
+) -> str:
+    if isinstance(expression.this, DColonCast):
+        return f"{safe_prefix or ''}{self.sql(expression, 'this')}"
+    format_sql = self.sql(expression, "format")
+    format_sql = f" FORMAT {format_sql}" if format_sql else ""
+    to_sql = self.sql(expression, "to")
+    to_sql = f" {to_sql}" if to_sql else ""
+    action = self.sql(expression, "action")
+    action = f" {action}" if action else ""
+    return f"{safe_prefix or ''}CAST({self.sql(expression, 'this')} AS{to_sql}{format_sql}{action})"
+
+
 def _parse_statement(self: Parser) -> t.Optional[exp.Expression]:
     if self._curr is None:
         return None
@@ -593,10 +607,7 @@ def format_model_expressions(
 
     *statements, query = expressions
 
-    def cast_to_colon(node: exp.Expression, dialect: t.Optional[str] = None) -> exp.Expression:
-        if isinstance(node, exp.Cast) and dialect == "tsql":
-            node = node.this
-
+    def cast_to_colon(node: exp.Expression) -> exp.Expression:
         if isinstance(node, exp.Cast) and not any(
             # Only convert CAST into :: if it doesn't have additional args set, otherwise this
             # conversion could alter the semantics (eg. changing SAFE_CAST in BigQuery to CAST)
@@ -611,11 +622,11 @@ def format_model_expressions(
                 cast.comments = node.comments
                 node = cast
 
-        exp.replace_children(node, cast_to_colon, dialect)
+        exp.replace_children(node, cast_to_colon)
         return node
 
     query = query.copy()
-    exp.replace_children(query, cast_to_colon, dialect)
+    exp.replace_children(query, cast_to_colon)
 
     return ";\n\n".join(
         [
@@ -821,6 +832,8 @@ def extend_sqlglot() -> None:
                     StagedFilePath: lambda self, e: self.table_sql(e),
                 }
             )
+
+            setattr(Generator, "cast_sql", _colon_cast_sql)
 
             generator.WITH_SEPARATED_COMMENTS = (
                 *generator.WITH_SEPARATED_COMMENTS,
