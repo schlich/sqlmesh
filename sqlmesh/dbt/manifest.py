@@ -273,11 +273,12 @@ class ManifestHelper:
         self._project_name = project.project_name
 
         if DBT_VERSION >= (1, 8):
+            from dbt_common.clients.system import get_env
             from dbt.mp_context import get_mp_context  # type: ignore
             from dbt_common.context import set_invocation_context  # type: ignore
 
             register_adapter(runtime_config, get_mp_context())  # type: ignore
-            set_invocation_context({})
+            set_invocation_context(get_env())
         else:
             register_adapter(runtime_config)  # type: ignore
 
