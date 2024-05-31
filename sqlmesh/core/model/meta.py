@@ -6,7 +6,7 @@ from functools import cached_property
 
 from pydantic import Field
 from sqlglot import Dialect, exp
-from sqlglot.helper import ensure_collection, ensure_list
+from sqlglot.helper import ensure_collection, ensure_list, first
 from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 
 from sqlmesh.core import dialect as d
@@ -108,16 +108,33 @@ class ModelMeta(_Node):
         if isinstance(v, exp.Expression):
             return [extract(v)]
         if isinstance(v, list):
-            return [
-                (
-                    entry[0].lower(),
-                    {
-                        key: d.parse(value)[0] if isinstance(value, str) else value
-                        for key, value in entry[1].items()
-                    },
-                )
-                for entry in v
-            ]
+            audits = []
+
+            for entry in v:
+                if isinstance(entry, tuple):
+                    audits.append((
+                        entry[0].lower(),
+                        {
+                            key: d.parse_one(value) if isinstance(value, str) else value
+                            for key, value in entry[1].items()
+                        },
+                    ))
+                elif isinstance(entry, dict):
+                    if len(entry) != 1:
+                        raise
+
+                    name, args = first(entry.items())
+
+                    audits.append((
+                        name.lower(),
+                        {
+                            key: d.parse_one(value) if isinstance(value, str) else value
+                            for key, value in args.items()
+                        },
+                    ))
+
+            return audits
+
         return v
 
     @field_validator("tags", mode="before")

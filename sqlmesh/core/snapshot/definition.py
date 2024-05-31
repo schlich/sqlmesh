@@ -319,6 +319,9 @@ class SnapshotInfoMixin(ModelKindMixin):
             version: The snapshot version.
             is_deployable: Indicates whether to return the table name for deployment to production.
         """
+        if self.is_external:
+            return self.name
+
         is_dev_table = not is_deployable
         if is_dev_table:
             version = self.temp_version_get_or_generate()
@@ -742,6 +745,11 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
             for start, end in other.dev_intervals:
                 self.add_interval(start, end, is_dev=True)
 
+
+    @property
+    def has_intervals(self) -> bool:
+        return not self.is_symbolic or self.model.audits
+
     def missing_intervals(
         self,
         start: TimeLike,
@@ -795,7 +803,7 @@ class Snapshot(PydanticModel, SnapshotInfoMixin):
             self.intervals if deployability_index.is_representative(self) else self.dev_intervals
         )
 
-        if self.is_symbolic or (self.is_seed and intervals):
+        if not self.has_intervals or (self.is_seed and intervals):
             return []
 
         allow_partials = not end_bounded and self.is_model and self.model.allow_partials
@@ -1502,7 +1510,7 @@ def missing_intervals(
     deployability_index = deployability_index or DeployabilityIndex.all_deployable()
 
     for snapshot in snapshots:
-        if snapshot.is_symbolic:
+        if not snapshot.has_intervals:
             continue
         interval = restatements.get(snapshot.snapshot_id)
         snapshot_start_date = start_dt
